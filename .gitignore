@@ -1,0 +1,8 @@
+.gradio/
+data/
+__pycache__/
+*.pyc
+outputs/best_checkpoint/model.safetensors
+outputs/roberta_finetuned/model.safetensors
+outputs/dialog_index.csv
+outputs/tfidf_matrix.npz

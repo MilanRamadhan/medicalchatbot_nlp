@@ -1,0 +1,36 @@
+                        precision    recall  f1-score   support
+
+               Allergy       0.93      0.95      0.94        85
+                Anemia       0.88      0.90      0.89        82
+               Anxiety       0.99      0.91      0.95        82
+             Arthritis       0.90      0.96      0.93        84
+                Asthma       0.79      0.89      0.84        84
+            Bronchitis       0.81      0.82      0.82        84
+              COVID-19       0.68      0.81      0.74        83
+Chronic Kidney Disease       0.96      0.94      0.95        85
+           Common Cold       0.88      0.84      0.86        82
+              Dementia       0.91      0.83      0.87        82
+            Depression       0.82      0.92      0.87        85
+            Dermatitis       0.95      0.99      0.97        83
+              Diabetes       0.93      0.92      0.92        85
+              Epilepsy       0.83      0.93      0.88        83
+        Food Poisoning       0.90      0.87      0.88        84
+             Gastritis       0.91      0.72      0.81        83
+         Heart Disease       0.90      0.94      0.92        83
+          Hypertension       0.88      0.80      0.84        82
+                   IBS       0.90      0.93      0.92        82
+             Influenza       0.92      0.71      0.80        83
+         Liver Disease       0.98      0.61      0.76        83
+              Migraine       0.80      0.94      0.86        84
+               Obesity       0.90      0.94      0.92        85
+           Parkinson's       0.86      0.80      0.82        83
+             Pneumonia       0.89      0.71      0.79        83
+             Sinusitis       0.81      0.84      0.83        83
+                Stroke       0.82      0.76      0.79        83
+      Thyroid Disorder       0.94      0.93      0.93        82
+          Tuberculosis       0.93      0.89      0.91        83
+                 Ulcer       0.66      0.98      0.79        85
+
+              accuracy                           0.87      2500
+             macro avg       0.88      0.87      0.87      2500
+          weighted avg       0.88      0.87      0.87      2500
