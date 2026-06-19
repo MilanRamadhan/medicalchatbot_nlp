@@ -16,18 +16,19 @@ const PROMPTS = [
 ];
 
 /**
- * Example prompt chips. Clicking one immediately sends it as a message.
+ * Example prompt chips, shown inside the empty-state welcome. Clicking one
+ * immediately sends it as a message.
  */
 export default function QuickPrompts({
   onSelect,
   disabled,
 }: QuickPromptsProps) {
   return (
-    <div className="border-t border-white/50 bg-white/40 px-3 py-3 backdrop-blur-sm">
-      <p className="mb-2 px-1 text-xs font-medium text-slate-400">
+    <div className="w-full max-w-md">
+      <p className="mb-2 text-center text-xs font-medium text-slate-400">
         💡 Contoh pertanyaan:
       </p>
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap justify-center gap-1.5">
         {PROMPTS.map((prompt, i) => (
           <button
             key={prompt}

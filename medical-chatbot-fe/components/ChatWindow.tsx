@@ -3,18 +3,26 @@
 import { useEffect, useRef } from "react";
 import type { Message } from "@/lib/types";
 import ChatBubble from "./ChatBubble";
+import QuickPrompts from "./QuickPrompts";
 import { RobotFace, RobotMascot } from "@/components/Icons";
 
 interface ChatWindowProps {
   messages: Message[];
   loading: boolean;
+  onQuickPrompt: (text: string) => void;
 }
 
 /**
  * Scrollable message area. Auto-scrolls to the bottom whenever a new message
- * arrives or the typing indicator toggles (PRD 5.4).
+ * arrives or the typing indicator toggles (PRD 5.4). When empty, shows the
+ * welcome mascot + quick-prompt chips (inside the scroll area, so the page
+ * itself never grows — only this region scrolls).
  */
-export default function ChatWindow({ messages, loading }: ChatWindowProps) {
+export default function ChatWindow({
+  messages,
+  loading,
+  onQuickPrompt,
+}: ChatWindowProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -24,21 +32,24 @@ export default function ChatWindow({ messages, loading }: ChatWindowProps) {
   const isEmpty = messages.length === 0;
 
   return (
-    <div className="chat-scroll flex-1 space-y-3 overflow-y-auto px-4 py-5">
+    <div className="chat-scroll min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4">
       {isEmpty && !loading && (
-        <div className="flex h-full min-h-[180px] flex-col items-center justify-center text-center text-slate-400 pop-in">
-          <div className="relative grid place-items-center">
-            <span
-              aria-hidden="true"
-              className="absolute h-24 w-24 rounded-full bg-teal-400/25 blur-2xl"
-              style={{ animation: "robot-glow 3s ease-in-out infinite" }}
-            />
-            <RobotMascot className="relative h-28 w-28" />
+        <div className="flex min-h-full flex-col items-center justify-center gap-3 py-2 text-center text-slate-400 pop-in">
+          <div className="flex flex-col items-center">
+            <div className="relative grid place-items-center">
+              <span
+                aria-hidden="true"
+                className="absolute h-14 w-14 rounded-full bg-teal-400/25 blur-2xl"
+                style={{ animation: "robot-glow 3s ease-in-out infinite" }}
+              />
+              <RobotMascot className="relative h-20 w-20" />
+            </div>
+            <p className="mt-1.5 max-w-xs text-sm">
+              Hai! Aku asisten kesehatanmu. Ceritakan gejalamu, atau pilih
+              salah satu contoh di bawah.
+            </p>
           </div>
-          <p className="mt-3 max-w-xs text-sm">
-            Hai! Aku asisten kesehatanmu. Ceritakan gejalamu, atau pilih salah
-            satu contoh di bawah.
-          </p>
+          <QuickPrompts onSelect={onQuickPrompt} disabled={loading} />
         </div>
       )}
 

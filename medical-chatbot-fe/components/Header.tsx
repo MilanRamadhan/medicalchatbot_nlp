@@ -34,8 +34,8 @@ function EcgLine() {
  */
 export default function Header() {
   return (
-    <header className="fade-up text-center">
-      <div className="mb-2 flex items-center justify-center gap-2">
+    <header className="fade-up shrink-0 text-center">
+      <div className="mb-1 flex items-center justify-center gap-2">
         <span className="grid h-10 w-10 place-items-center rounded-2xl bg-gradient-to-br from-teal-500 to-cyan-500 shadow-lg shadow-teal-500/30">
           <HealthIcon className="h-6 w-6 text-white" />
         </span>
@@ -49,18 +49,17 @@ export default function Header() {
         )}
       </div>
 
-      <div className="mb-2 flex justify-center">
+      <div className="mb-1 flex justify-center">
         <EcgLine />
       </div>
 
       <p className="shiny-text text-sm font-medium">
-        Asisten kesehatan berbasis AI (Bahasa Indonesia &amp; English) —
-        klasifikasi 30 penyakit dengan RoBERTa.
+        Asisten kesehatan AI (Indonesia &amp; English) — klasifikasi 30 penyakit
+        dengan RoBERTa.
       </p>
 
-      <p className="mx-auto mt-3 max-w-xl rounded-xl border border-amber-200/70 bg-amber-50/70 px-3 py-2 text-xs text-amber-800 backdrop-blur-sm">
-        ⚠️ Hanya untuk tujuan edukasi dan bukan pengganti diagnosis medis
-        profesional. Selalu konsultasikan keluhan kesehatan ke dokter.
+      <p className="mx-auto mt-2 max-w-xl rounded-lg border border-amber-200/70 bg-amber-50/70 px-3 py-1.5 text-[0.7rem] text-amber-800 backdrop-blur-sm">
+        ⚠️ Hanya untuk edukasi — bukan pengganti diagnosis dokter.
       </p>
     </header>
   );

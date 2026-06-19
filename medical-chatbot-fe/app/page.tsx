@@ -9,7 +9,6 @@ import ModelMetrics from "@/components/ModelMetrics";
 import LanguageSelector from "@/components/LanguageSelector";
 import ChatWindow from "@/components/ChatWindow";
 import ChatInput from "@/components/ChatInput";
-import QuickPrompts from "@/components/QuickPrompts";
 
 export default function Home() {
   const [sessionId, setSessionId] = useState("");
@@ -63,8 +62,6 @@ export default function Home() {
     setLastUserMessage(null);
   }
 
-  const showQuickPrompts = messages.length === 0 && !loading;
-
   return (
     <>
       {/* Aurora background (reactbits-style) */}
@@ -74,13 +71,13 @@ export default function Home() {
         <span className="aurora-blob b3" />
       </div>
 
-      <main className="mx-auto flex min-h-screen w-full max-w-[760px] flex-col gap-5 px-4 py-8">
+      <main className="mx-auto flex h-[100dvh] w-full max-w-[760px] flex-col gap-3 overflow-hidden px-4 py-5">
         <Header />
         <ModelMetrics />
 
         {/* Chat card */}
         <section
-          className="fade-up flex min-h-[58vh] flex-1 flex-col overflow-hidden rounded-2xl border border-white/60 bg-white/60 shadow-2xl shadow-teal-900/10 backdrop-blur-xl"
+          className="fade-up flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-white/60 bg-white/60 shadow-2xl shadow-teal-900/10 backdrop-blur-xl"
           style={{ animationDelay: "120ms" }}
         >
           {/* Controls */}
@@ -128,16 +125,16 @@ export default function Home() {
             </div>
           )}
 
-          <ChatWindow messages={messages} loading={loading} />
-
-          {showQuickPrompts && (
-            <QuickPrompts onSelect={handleSend} disabled={loading} />
-          )}
+          <ChatWindow
+            messages={messages}
+            loading={loading}
+            onQuickPrompt={handleSend}
+          />
 
           <ChatInput onSend={handleSend} disabled={loading} />
         </section>
 
-        <footer className="pb-2 text-center text-xs text-slate-400">
+        <footer className="shrink-0 text-center text-xs text-slate-400">
           Kelompok 15 · SINF6054 · Pemrosesan Bahasa Alami
         </footer>
       </main>
