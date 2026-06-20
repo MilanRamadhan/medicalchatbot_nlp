@@ -8,3 +8,5 @@ pandas>=2.2
 numpy>=1.26
 scipy>=1.12
 langdetect>=1.0.9
+sentencepiece>=0.1.99   # diperlukan MarianTokenizer (fallback terjemahan offline)
+deep-translator>=1.11   # Google Translate EN->ID (utama, kualitas medis lebih baik)

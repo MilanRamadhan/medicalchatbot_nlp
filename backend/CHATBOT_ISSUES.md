@@ -4,6 +4,11 @@ Ditemukan lewat *adversarial testing* manual pada 2026-06-19 (sesi demo
 frontend ↔ backend). Semua issue ada di logika `backend/app/chatbot.py` dan
 `backend/app/nlp_utils.py` — **bukan** masalah frontend. Diurut by severity.
 
+> **UPDATE 2026-06-19 — sebagian besar SUDAH DIPERBAIKI & diuji.** Lihat kolom
+> "Status" di tabel ringkasan paling bawah. Yang ditunda hanya #3 & #9 karena
+> butuh retraining/kalibrasi model (berisiko menurunkan akurasi kalau diubah
+> sembarangan).
+
 ---
 
 ## P0 — SAFETY (wajib diperbaiki sebelum dipresentasikan)
@@ -109,15 +114,68 @@ ditampilkan apa adanya + disclaimer (sudah ada), tapi sadari ini keterbatasan.
 
 ---
 
-## Ringkasan prioritas
-| # | Issue | Severity | Lokasi |
-|---|---|---|---|
-| 1 | "keluar nanah" → bye | **P0** | `chatbot.py` `_intent()` / `BYE` |
-| 2 | gejala genital/nanah tak ter-cover | **P0** | `nlp_utils.py`, `RED_FLAG_WORDS` |
-| 3 | "tidak" diabaikan classifier | P1 | `chatbot.py` `_classify()` |
-| 4 | "mungkin" ditolak | P1 | `chatbot.py` `_intent()` |
-| 5 | guard off-topic mudah di-bypass | P1 | `chatbot.py` `_intent()` |
-| 6 | fallback health_q identik/ngawur | P2 | `chatbot.py` `_retrieve()` |
-| 7 | "pening" → headache | P2 | `nlp_utils.py` |
-| 8 | retrieval advice tak relevan | P2 | `chatbot.py` `_retrieve()` |
-| 9 | over-confidence | P2 | model (training/kalibrasi) |
+## Ringkasan prioritas & status
+
+| # | Issue | Severity | Status | Lokasi / cara fix |
+|---|---|---|---|---|
+| 1 | "keluar nanah" → bye | **P0** | ✅ Fixed | `_intent()`: 'keluar'/'selesai' dibuang dari `BYE`, kata tunggal dicocokkan utuh (`_BYE_WORDS`) |
+| 2 | gejala genital/nanah tak ter-cover | **P0** | ✅ Fixed | intent `urgent_referral` baru + set `URGENT_REFERRAL` (nanah, keputihan, dll → arahkan ke dokter) |
+| 3 | "tidak" diabaikan classifier | P1 | ⏳ Ditunda | butuh model negation-aware / retraining — berisiko |
+| 4 | "mungkin"/"sedikit" ditolak | P1 | ✅ Fixed | set `UNSURE` (skip) & `PARTIAL_YES` (=iya) di `_intent()` |
+| 5 | guard off-topic mudah di-bypass | P1 | ✅ Fixed | set `CODE_OFFTOPIC` override di `_intent()` |
+| 6 | fallback health_q identik/ngawur | P2 | ✅ Fixed | `_retrieve()` return None bila tak relevan → minta gejala spesifik |
+| 7 | "pening" → headache | P2 | ✅ Fixed | `nlp_utils.py`: 'pening' dipindah ke `dizziness` |
+| 8 | retrieval advice tak relevan/kosong | P2 | ✅ Fixed | `RETRIEVAL_MIN_SIM` + `_clean_advice()` buang kalimat basa-basi |
+| 9 | over-confidence | P2 | ⏳ Ditunda | kalibrasi/training model |
+
+Bonus: bare "sesak" kini dikenali (`nlp_utils.py` → `shortness of breath`).
+Semua fix sudah diuji via `curl` ke `/chat` (2026-06-19).
+
+---
+
+## Contoh repro tambahan (sesi tes 2026-06-19)
+
+Memperkuat issue di atas dengan transkrip nyata:
+
+- **Issue #4 (jawaban tak-pasti ditolak):** pending "sesak napas?" → user jawab
+  **`"sedikit"`** → bot balas *"Maaf, saya hanya bisa membantu seputar
+  kesehatan…"*. (Sama seperti `"mungkin"`.) Perlu set `UNSURE`/partial-yes.
+- **Issue #2 (coverage gejala):** **`"saya sesak"`** ditolak off-topic, tapi
+  **`"saya sesak napas"`** dikenali → Heart Disease 88%. Kata parsial "sesak"
+  belum masuk kamus gejala.
+- **Issue #8 (saran retrieval ngawur/kosong):**
+  - Diagnosis **Pneumonia** → saran soal **Typhoid/Salmonella** (beda penyakit).
+  - Diagnosis **Ulcer** → saran hanya *"Hi ! Good evening. I am Chat Doctor
+    answering your query."* (tanpa isi medis).
+- **Issue #3 (negatif diabaikan):** hanya gejala **`demam`** (sesak, nyeri dada,
+  berkeringat, batuk semua dijawab "tidak") → tetap **Pneumonia 58%**, padahal
+  gejala khas pneumonia justru ditolak semua.
+- **Catatan (bukan bug):** kolom "Model dasar (tanpa fine-tuning)" selalu
+  "Thyroid Disorder (5%)" apa pun input-nya — wajar karena base `roberta-base`
+  belum dilatih; justru memperlihatkan dampak fine-tuning.
+
+---
+
+## Penambahan fitur (2026-06-19): saran medis ikut bahasa user
+
+"Saran medis" diambil mentah dari dataset dialog dokter (ChatDoctor) yang
+**berbahasa Inggris**. Ditambahkan **terjemahan otomatis EN→ID** supaya saran
+tampil sesuai bahasa user.
+
+Pipeline terjemahan berlapis di `chatbot._translate_to_id()`:
+1. **Google Translate** (`deep-translator`) — UTAMA. Kualitas medis terbaik
+   (nama obat & istilah tidak rusak, mis. cetirizine/saline tetap benar).
+   Butuh internet saat jalan.
+2. **MarianMT lokal** (`Helsinki-NLP/opus-mt-en-id`, di-load di `artifacts.py`
+   sebagai `Artifacts.translator=(tok,model)`, ±300MB cache) — fallback offline,
+   kualitas lebih kasar (drug names sering rusak).
+3. Gagal semua → saran tetap Bahasa Inggris.
+
+- **Dependency baru:** `deep-translator` (Google, utama) + `sentencepiece`
+  (untuk MarianTokenizer fallback).
+- **Label:** lang `id` & terjemahan berhasil → **"Saran medis:"**; lang `en`
+  → **"Medical advice:"**; terjemahan gagal → **"Saran medis (sumber dataset, EN):"**.
+- **Catatan transformers:** `pipeline("translation")` tidak terdaftar di versi
+  terpasang → Marian dipakai via `AutoModelForSeq2SeqLM.generate()`.
+- Startup backend pertama lebih lama (download model Marian ±300MB sekali; sudah
+  ke-cache di mesin Milan).

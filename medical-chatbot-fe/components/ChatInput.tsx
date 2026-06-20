@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 
 interface ChatInputProps {
   onSend: (text: string) => void;
@@ -9,10 +9,19 @@ interface ChatInputProps {
 
 /**
  * Text input + Send button. Enter submits; the field is disabled while a
- * response is pending (PRD 5.5).
+ * response is pending (PRD 5.5). The field auto-focuses on mount and re-focuses
+ * after each reply finishes, so the user can keep typing without clicking back
+ * into it.
  */
 export default function ChatInput({ onSend, disabled }: ChatInputProps) {
   const [value, setValue] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Focus on mount and whenever the input becomes enabled again (i.e. right
+  // after a bot reply arrives). The disabled field blurs during loading.
+  useEffect(() => {
+    if (!disabled) inputRef.current?.focus();
+  }, [disabled]);
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -30,10 +39,12 @@ export default function ChatInput({ onSend, disabled }: ChatInputProps) {
       className="flex items-center gap-2 border-t border-white/60 bg-white/60 px-3 py-3 backdrop-blur-md"
     >
       <input
+        ref={inputRef}
         type="text"
         value={value}
         onChange={(e) => setValue(e.target.value)}
         disabled={disabled}
+        autoFocus
         placeholder="Ceritakan gejala kamu / Describe your symptoms…"
         aria-label="Pesan"
         className="flex-1 rounded-full border border-slate-200 bg-white/80 px-4 py-2.5 text-[0.925rem] text-slate-800 shadow-sm transition-all placeholder:text-slate-400 focus:border-teal-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-teal-500/15 disabled:opacity-60"

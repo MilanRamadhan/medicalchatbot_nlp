@@ -23,6 +23,19 @@ from .nlp_utils import SYMPTOMS_28, SYMPTOM_ID, extract_symptoms, detect_lang_sm
 
 CONFIDENCE_THRESHOLD = 0.70
 MAX_TURNS = 5
+# Di bawah ambang kemiripan ini, dialog hasil retrieval dianggap tidak relevan
+# (jangan ditampilkan sebagai "saran medis").
+RETRIEVAL_MIN_SIM = 0.06
+
+# Kalimat pembuka basa-basi yang sering muncul di dataset dialog dokter
+# ("Hi", "Thanks for your question", "I am Chat Doctor ...") — dibuang dari
+# saran medis supaya yang tersisa hanya konten yang berguna.
+_ADVICE_FILLER_RE = re.compile(
+    r'^(hi|hello|hey|dear|thanks?|thank you|welcome|good (morning|afternoon|evening|day)|'
+    r'i am (a )?chat ?doctor|i understand|i can understand|i have (gone|reviewed|read)|'
+    r'greetings|noted|ok|okay)\b',
+    re.I,
+)
 
 GREETING = {
     'halo', 'hai', 'hi', 'hello', 'hey', 'pagi', 'siang', 'sore', 'malam',
@@ -37,7 +50,13 @@ NO = {
     'ga', 'gada', 'tidak ada', 'ga ada', 'engga dok', 'enggak dok',
 }
 THANKS = {'terima kasih', 'makasih', 'thanks', 'thank you', 'thx', 'tengkyu', 'makasi', 'trims'}
-BYE = {'bye', 'dadah', 'sampai jumpa', 'selesai', 'udah cukup', 'keluar', 'exit', 'udahan'}
+BYE = {'bye', 'dadah', 'sampai jumpa', 'udah cukup', 'sudah cukup', 'exit', 'udahan'}
+# CATATAN: 'keluar' & 'selesai' SENGAJA tidak dimasukkan — keduanya ambigu
+# dengan keluhan medis (mis. "keluar nanah", "menyelesaikan") dan dulu memicu
+# false-match substring yang berbahaya. Kata tunggal dicocokkan utuh di
+# _intent() (lihat _BYE_WORDS), frasa multi-kata sebagai substring.
+_BYE_WORDS = {b for b in BYE if ' ' not in b}
+_BYE_PHRASES = {b for b in BYE if ' ' in b}
 HEALTH_CTX = {
     'sakit', 'nyeri', 'gejala', 'penyakit', 'dokter', 'obat', 'demam', 'sehat',
     'kesehatan', 'badan', 'tubuh', 'sick', 'pain', 'disease', 'doctor', 'medicine',
@@ -49,6 +68,29 @@ HEALTH_CTX = {
 RED_FLAG_WORDS = {
     'pingsan', 'tidak sadar', 'kejang', 'pendarahan hebat', 'sesak berat',
     'nyeri dada hebat', 'sulit bernapas', 'unconscious', 'seizure', 'severe bleeding',
+}
+# Jawaban tidak-pasti / parsial untuk pertanyaan ya/tidak. Dulu jatuh ke
+# off_topic. 'sedikit/agak' = "iya" lemah (gejala ada); 'mungkin/ragu' = skip.
+PARTIAL_YES = {
+    'sedikit', 'agak', 'dikit', 'lumayan', 'kadang', 'kadang-kadang',
+    'kadang kadang', 'sesekali', 'rada', 'sedikit sih',
+}
+UNSURE = {
+    'mungkin', 'kurang tau', 'kurang tahu', 'ga tau', 'gak tau', 'nggak tau',
+    'tidak tau', 'tidak tahu', 'entah', 'tidak yakin', 'ragu', 'kayaknya',
+    'kurang yakin',
+}
+# Keluhan yang perlu segera diperiksa dokter (bukan darurat 119, tapi jangan
+# diabaikan / dianggap off-topic). Dicocokkan sebagai substring.
+URGENT_REFERRAL = {
+    'nanah', 'keputihan', 'keluar darah', 'muntah darah', 'bab berdarah',
+    'benjolan', 'kencing berdarah', 'kencing darah',
+}
+# Permintaan non-medis yang umum dipakai untuk menembus guard off-topic
+# (mis. "buatkan script ... seputar kesehatan").
+CODE_OFFTOPIC = {
+    'javascript', 'python', 'php', 'html', 'css', 'sql', 'script', 'kode',
+    'coding', 'program', 'pemrograman', 'matematika', 'terjemahkan', 'translate',
 }
 
 
@@ -92,6 +134,8 @@ class MedicalChatbot:
 
     # ── retrieval (TF-IDF) ──
     def _retrieve(self, disease, query):
+        """Ambil saran dari dialog termirip. Return None kalau tidak ada yang
+        cukup relevan (di bawah ambang) atau isinya cuma basa-basi."""
         art = self.artifacts
         dialog_df = art.dialog_df
         sub = dialog_df[dialog_df['predicted_disease'] == disease]
@@ -99,9 +143,63 @@ class MedicalChatbot:
             sub = dialog_df
         q = art.tfidf.transform([query])
         sims = cosine_similarity(q, art.tfidf_matrix[sub.index])[0]
-        bi = sub.index[sims.argmax()]
+        best = int(sims.argmax())
+        if sims[best] < RETRIEVAL_MIN_SIM:
+            return None  # tidak ada dialog yang cukup relevan dengan keluhan
+        bi = sub.index[best]
         full = dialog_df.loc[bi, 'doctor_text']
-        return ' '.join(re.split(r'(?<=[.!?]) +', full.strip())[:3])
+        return self._clean_advice(full)
+
+    @staticmethod
+    def _clean_advice(text):
+        """Buang kalimat pembuka basa-basi, ambil maksimal 3 kalimat berisi.
+        Return None kalau setelah dibersihkan tidak ada konten."""
+        sents = re.split(r'(?<=[.!?]) +', str(text).strip())
+        meaningful = [
+            s for s in sents
+            if not _ADVICE_FILLER_RE.match(s.strip()) and len(s.strip()) >= 8
+        ]
+        advice = ' '.join(meaningful[:3]).strip()
+        return advice or None
+
+    def _translate_to_id(self, text):
+        """Terjemahkan EN->ID (best-effort). Prioritas kualitas:
+          1) Google Translate (deep-translator) — terbaik utk istilah medis &
+             nama obat, tapi butuh internet.
+          2) Model lokal MarianMT — fallback offline (kualitas lebih kasar).
+          3) None — saran tetap Bahasa Inggris.
+        """
+        if not text:
+            return None
+
+        # 1) Google Translate
+        try:
+            from deep_translator import GoogleTranslator
+
+            out = GoogleTranslator(source='en', target='id').translate(text)
+            if out and out.strip():
+                return out.strip()
+        except Exception:  # noqa: BLE001
+            pass  # lanjut ke fallback offline
+
+        # 2) MarianMT lokal (kalau translator artifact tersedia)
+        tr = getattr(self.artifacts, 'translator', None)
+        if tr:
+            try:
+                tok, mdl = tr
+                art = self.artifacts
+                enc = tok(
+                    text, return_tensors='pt', truncation=True, max_length=512,
+                ).to(art.device)
+                with torch.no_grad():
+                    gen = mdl.generate(**enc, max_length=512, num_beams=1)
+                out = tok.batch_decode(gen, skip_special_tokens=True)
+                if out and out[0].strip():
+                    return out[0].strip()
+            except Exception:  # noqa: BLE001
+                pass
+
+        return None
 
     def _next_question(self, top3):
         if not top3:
@@ -126,15 +224,24 @@ class MedicalChatbot:
         w = set(t.split())
         if any(rf in t for rf in RED_FLAG_WORDS):
             return 'red_flag'
-        if self.pending and (t in NO or w & NO):
+        if any(u in t for u in URGENT_REFERRAL):
+            return 'urgent_referral'
+        # Jawaban atas pertanyaan follow-up (hanya saat ada pending).
+        # 'tidak'/'mungkin'/'ragu' -> skip; 'iya'/'sedikit'/'agak' -> punya gejala.
+        if self.pending and (t in NO or w & NO or t in UNSURE or (w & UNSURE)):
             return 'confirm_no'
-        if self.pending and (t in YES or w & YES):
+        if self.pending and (t in YES or w & YES or t in PARTIAL_YES or (w & PARTIAL_YES)):
             return 'confirm_yes'
+        # Permintaan non-medis yang menempel kata kesehatan -> tetap off-topic.
+        if (w & CODE_OFFTOPIC) and not extract_symptoms(text):
+            return 'off_topic'
         if t in GREETING or w & GREETING:
             return 'greeting'
         if any(p in t for p in THANKS):
             return 'thanks'
-        if t in BYE or any(p in t for p in BYE):
+        # Bye: kata tunggal dicocokkan utuh (hindari 'keluar' di "keluar nanah");
+        # frasa multi-kata dicocokkan sebagai substring.
+        if (w & _BYE_WORDS) or any(p in t for p in _BYE_PHRASES):
             return 'bye'
         if extract_symptoms(text):
             return 'symptom'
@@ -159,6 +266,17 @@ class MedicalChatbot:
             "advice": advice,
             "symptoms": list(self.symptoms),
         }
+        # Blok saran hanya ditampilkan kalau retrieval menghasilkan konten relevan.
+        # Saat bahasa = ID, saran (yang asalnya EN) diterjemahkan; kalau translator
+        # tidak tersedia, fallback ke teks Inggris dengan label "(EN)".
+        advice_local = self._translate_to_id(advice) if (advice and ID) else None
+        advice_id = (
+            f"---\n**Saran medis:** {advice_local}\n\n"
+            if advice_local
+            else (f"---\n**Saran medis (sumber dataset, EN):** {advice}\n\n" if advice else "")
+        )
+        advice_en = f"---\n**Medical advice:** {advice}\n\n" if advice else ""
+
         self.reset()
         if ID:
             text = (
@@ -166,7 +284,7 @@ class MedicalChatbot:
                 f"**Kemungkinan penyakit:** {pred} (confidence: {conf:.0%})\n\n"
                 f"**3 kemungkinan teratas:**\n{t3}\n\n"
                 f"**Model dasar (tanpa fine-tuning):** {base_str}\n\n"
-                f"---\n**Saran medis (sumber dataset, EN):** {advice}\n\n"
+                f"{advice_id}"
                 f"*⚠️ Hanya untuk edukasi. Silakan konsultasi ke dokter.*"
             )
         else:
@@ -175,7 +293,7 @@ class MedicalChatbot:
                 f"**Predicted disease:** {pred} ({conf:.0%} confidence)\n\n"
                 f"**Top 3 possibilities:**\n{t3}\n\n"
                 f"**Base model (no fine-tuning):** {base_str}\n\n"
-                f"---\n**Medical advice:** {advice}\n\n"
+                f"{advice_en}"
                 f"*⚠️ Educational purposes only. Please consult a real doctor.*"
             )
         return text, result
@@ -201,6 +319,19 @@ class MedicalChatbot:
             ) if ID else (
                 "🚨 Your symptoms may indicate an EMERGENCY. "
                 "Please contact emergency services immediately. Don't wait!"
+            )
+            return text, None
+
+        if intent == 'urgent_referral':
+            self.turn -= 1
+            text = (
+                "Keluhan yang kamu sebutkan sebaiknya **diperiksa langsung oleh "
+                "dokter/tenaga medis** untuk pemeriksaan lebih lanjut. Jangan "
+                "ditunda ya, dan hindari mengobati sendiri."
+            ) if ID else (
+                "The symptom you mentioned should be **examined by a doctor** "
+                "for proper evaluation. Please don't delay, and avoid "
+                "self-medication."
             )
             return text, None
 
@@ -257,13 +388,26 @@ class MedicalChatbot:
         if intent == 'health_q' and not self.symptoms:
             self.turn -= 1
             advice = self._retrieve('Common Cold', user_input)  # general retrieval
-            text = (
-                f"Ini pertanyaan kesehatan umum. Dari basis data konsultasi: {advice}\n\n"
-                "Kalau kamu punya gejala spesifik, ceritakan ya."
-            ) if ID else (
-                f"General health question. From our consultation database: {advice}\n\n"
-                "If you have specific symptoms, please describe them."
-            )
+            if advice:
+                if ID:
+                    shown = self._translate_to_id(advice) or advice
+                    text = (
+                        f"{shown}\n\n"
+                        "Kalau kamu punya gejala spesifik, ceritakan ya."
+                    )
+                else:
+                    text = (
+                        f"From our consultation database: {advice}\n\n"
+                        "If you have specific symptoms, please describe them."
+                    )
+            else:
+                text = (
+                    "Boleh ceritakan gejala spesifik yang kamu rasakan? "
+                    "Misalnya demam, batuk, nyeri dada, atau mual."
+                ) if ID else (
+                    "Could you describe the specific symptoms you feel? "
+                    "For example fever, cough, chest pain, or nausea."
+                )
             return text, None
 
         if not self.symptoms:

@@ -61,6 +61,7 @@ class Artifacts:
     tfidf_matrix: Any
     disease_symptom_stats: dict
     metrics: dict
+    translator: Any = None  # pipeline terjemahan EN->ID (best-effort, boleh None)
     max_len: int = MAX_LEN
 
 
@@ -128,6 +129,26 @@ def load_artifacts() -> Artifacts:
     with open(os.path.join(SAVE_DIR, "metrics.json")) as f:
         metrics = json.load(f)
 
+    # Penerjemah saran medis EN->ID (best-effort). Dipakai agar "Saran medis"
+    # dari dataset (aslinya Bahasa Inggris) bisa tampil sesuai bahasa user.
+    # Diunduh dari HF Hub sekali (±300MB), lalu di-cache. Kalau gagal (tidak ada
+    # internet / sentencepiece belum terpasang), saran tetap Bahasa Inggris.
+    try:
+        from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+
+        _tr_name = "Helsinki-NLP/opus-mt-en-id"
+        _tr_tok = AutoTokenizer.from_pretrained(_tr_name)
+        _tr_mdl = AutoModelForSeq2SeqLM.from_pretrained(_tr_name).to(device)
+        _tr_mdl.eval()
+        translator = (_tr_tok, _tr_mdl)  # dipakai di chatbot._translate_to_id()
+        logger.info("Translator EN->ID siap.")
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "Gagal load translator en->id (%s). Saran medis tetap Bahasa Inggris.",
+            exc,
+        )
+        translator = None
+
     logger.info(
         "Artifacts loaded. %d classes, %d dialogs.", num_labels, len(dialog_df)
     )
@@ -145,4 +166,5 @@ def load_artifacts() -> Artifacts:
         tfidf_matrix=tfidf_matrix,
         disease_symptom_stats=disease_symptom_stats,
         metrics=metrics,
+        translator=translator,
     )
