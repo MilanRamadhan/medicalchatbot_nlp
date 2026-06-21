@@ -131,6 +131,13 @@ ditampilkan apa adanya + disclaimer (sudah ada), tapi sadari ini keterbatasan.
 Bonus: bare "sesak" kini dikenali (`nlp_utils.py` → `shortness of breath`).
 Semua fix sudah diuji via `curl` ke `/chat` (2026-06-19).
 
+Robustness tambahan (2026-06-19):
+- Frasa dada bersisipan dikenali: `dada terasa nyeri/sakit/berat`, `dada berat`,
+  `nyeri/sakit di dada` (`nlp_utils.py` → `chest pain`).
+- Tokenisasi `_intent()` pakai `re.findall(r"[\w']+", t)` (bukan `split()`),
+  jadi tanda baca/backslash di ujung jawaban ("tidak\\", "iya!", "ngga,") tetap
+  terbaca sebagai ya/tidak — tidak lagi jatuh ke off-topic.
+
 ---
 
 ## Contoh repro tambahan (sesi tes 2026-06-19)

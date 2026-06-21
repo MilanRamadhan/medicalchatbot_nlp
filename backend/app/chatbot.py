@@ -221,7 +221,10 @@ class MedicalChatbot:
     # ── intent detection ──
     def _intent(self, text):
         t = text.lower().strip()
-        w = set(t.split())
+        # Tokenisasi pakai regex kata (bukan split spasi) supaya tanda baca /
+        # backslash di ujung tidak merusak pencocokan, mis. "tidak\\" / "iya!"
+        # tetap terbaca sebagai "tidak" / "iya".
+        w = set(re.findall(r"[\w']+", t))
         if any(rf in t for rf in RED_FLAG_WORDS):
             return 'red_flag'
         if any(u in t for u in URGENT_REFERRAL):
