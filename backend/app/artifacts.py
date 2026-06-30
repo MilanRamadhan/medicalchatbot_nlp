@@ -37,7 +37,10 @@ SAVE_DIR = os.path.join(BASE_DIR, "outputs")
 
 REQUIRED_FILES = [
     os.path.join(SAVE_DIR, "roberta_finetuned", "label_mappings.json"),
-    os.path.join(SAVE_DIR, "roberta_finetuned", "model.safetensors"),
+    # CATATAN: roberta_finetuned/model.safetensors TIDAK diwajibkan — dari folder
+    # ini kita cuma butuh tokenizer + label_mappings, bobot modelnya tidak di-load
+    # (yang dipakai best_checkpoint/model.safetensors). Mengeluarkannya dari daftar
+    # wajib menghemat ~500MB saat deploy. File boleh tetap ada secara lokal.
     os.path.join(SAVE_DIR, "best_checkpoint", "model.safetensors"),
     os.path.join(SAVE_DIR, "dialog_index.csv"),
     os.path.join(SAVE_DIR, "tfidf_vectorizer.pkl"),
